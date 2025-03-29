@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    env_file:
+      - .env
+    ports:
+      - ${POSTGRES_PORT}:${POSTGRES_PORT}
+    environment:
+      PG_DATA: /var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  nest-api:
+    container_name: nest-api
+    build:
+      context: .
+    volumes:
+      - ./src:/app/src # Монтируем только src для hot-reload
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.json:/app/tsconfig.json
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    ports:
+      - ${PORT}:${PORT}
+    command: npm run start:dev
+    restart: always
+
+volumes:
+  pgdata:
