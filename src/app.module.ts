@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { ImageController } from './image/image.controller';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { InvitationsModule } from './invitations/invitations.module';
     UsersModule,
     InvitationsModule,
   ],
-  controllers: [],
+  controllers: [ImageController],
   providers: [],
 })
 export class AppModule {}
