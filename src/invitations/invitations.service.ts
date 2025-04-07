@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Invitation } from './entities/invitation.entity';
 import { LobbyPlayer } from './entities/lobby-player.entity';
 import { GameGateway } from '../game/game.gateway';
+import { GameService } from 'src/game/game.service';
 
 @Injectable()
 export class InvitationsService {
@@ -15,6 +16,7 @@ export class InvitationsService {
     @InjectRepository(LobbyPlayer)
     private lobbyPlayerRepository: Repository<LobbyPlayer>,
     private usersService: UsersService,
+    private gameService: GameService,
     private gameGateway: GameGateway,
   ) {}
 
@@ -175,16 +177,21 @@ export class InvitationsService {
     await this.lobbyPlayerRepository.save(lobbyPlayer);
 
     const lobbyData = await this.getLobby(invitationId);
+    console.table(lobbyData);
     const allPlayersReady = lobbyData.players.every(
       (player: any) => player.ready,
     );
+    console.log('allPlayersReady', allPlayersReady);
     const playerCount = lobbyData.players.length;
     const MIN_PLAYERS = 2;
 
     // Проверяем, что в лобби минимум 2 игрока и все готовы
     if (playerCount >= MIN_PLAYERS && allPlayersReady) {
-      const gameId = await this.createGame(invitationId);
       invitation.status = 'accepted';
+      await this.invitationsRepository.save(invitation);
+
+      const game = await this.createGame(invitationId);
+      const gameId = game.id;
       invitation.gameId = gameId;
       await this.invitationsRepository.save(invitation);
 
@@ -249,7 +256,7 @@ export class InvitationsService {
     return invitation;
   }
 
-  private async createGame(invitationId: number): Promise<number> {
-    return invitationId; // Заглушка
+  private async createGame(invitationId: number) {
+    return this.gameService.createGame(invitationId);
   }
 }
