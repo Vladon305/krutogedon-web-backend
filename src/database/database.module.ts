@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { Auth } from 'src/auth/entities/auth.entity';
-import { Game } from 'src/game/entities/game.entity';
-import { User } from 'src/users/entities/user.entity';
-import { Invitation } from 'src/invitations/entities/invitation.entity';
+import { Game } from '../game/entities/game.entity';
+import { User } from '../users/entities/user.entity';
+import { Invitation } from '../invitations/entities/invitation.entity';
+import { Card } from '../game/entities/card.entity';
 
 @Module({
   imports: [
@@ -20,8 +20,10 @@ import { Invitation } from 'src/invitations/entities/invitation.entity';
           password: configService.get<string>('POSTGRES_PASSWORD', 'root'),
           database: configService.get<string>('POSTGRES_DB', 'postgres'),
           autoLoadEntities: true,
-          entities: [Auth, Game, User, Invitation], // Добавлено!
-          synchronize: true, // Отключи на проде!
+          entities: [Game, User, Invitation, Card], // Добавлено!
+          synchronize: false, // Отключи на проде!
+          migrations: [__dirname + '/../migrations/*.js'], // Указываем путь к миграциям
+          migrationsRun: false, // Не запускаем миграции автоматически
         };
       },
     }),
