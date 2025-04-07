@@ -11,5 +11,12 @@ export class MakeMoveDto {
     example: { card: 'Ace of Spades' },
   })
   @IsObject()
-  move: any;
+  move: {
+    type: 'play-card' | 'end-turn' | 'attack' | 'buy-card';
+    cardId?: number;
+    targetId?: number;
+    damage?: number;
+    marketplaceIndex?: number;
+    isLegendary?: boolean;
+  };
 }

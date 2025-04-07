@@ -8,27 +8,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-
-class CreateGameDto {
-  invitationId: number;
-}
-
-class MakeMoveDto {
-  gameId: number;
-  move: {
-    type: 'play-card' | 'end-turn' | 'attack' | 'buy-card';
-    cardId?: number;
-    targetId?: string;
-    damage?: number;
-    marketplaceIndex?: number;
-    isLegendary?: boolean;
-  };
-}
-
-class SelectCardsDto {
-  playerId: string;
-  selectedCards: { property: any; familiar: any; playerArea: any };
-}
+import { CreateGameDto } from './dto/create-game.dto';
+import { MakeMoveDto } from './dto/make-move.dto';
+import { SelectCardsDto } from './dto/select-cards.dto';
+import { SelectedPlayArea, WizardPropertyToken } from './types';
+import { Card } from './entities/card.entity';
 
 @ApiTags('game')
 @Controller('game')
@@ -62,6 +46,36 @@ export class GameController {
     return this.gameService.getGame(gameId);
   }
 
+  @Get(':gameId/selection-options/:playerId')
+  async getSelectionOptions(
+    @Param('gameId') gameId: string,
+    @Param('playerId') playerId: string,
+  ): Promise<{
+    properties: WizardPropertyToken[];
+    familiars: Card[];
+    playerAreas: SelectedPlayArea[];
+  }> {
+    return this.gameService.getSelectionOptions(gameId, playerId);
+  }
+
+  // @Post(':gameId/select-cards/:playerId')
+  // @UseGuards(AuthGuard('jwt'))
+  // @ApiBearerAuth()
+  // @ApiOperation({ summary: 'Выбрать стартовые карты' })
+  // @ApiResponse({ status: 200, description: 'Карты выбраны', type: Object })
+  // async selectCards(
+  //   @Param('gameId') gameId: string,
+  //   @Param('playerId') playerId: string,
+  //   @Body()
+  //   selectedCards: {
+  //     property: WizardPropertyToken;
+  //     familiar: Card;
+  //     playerArea: SelectedPlayArea;
+  //   },
+  // ): Promise<Game> {
+  //   return this.gameService.selectCards(gameId, playerId, selectedCards);
+  // }
+
   @Post(':gameId/select-cards')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
@@ -89,34 +103,105 @@ export class GameController {
       if (!move.cardId) {
         throw new Error('Не указана карта для игры');
       }
-      return this.gameService.playCard(gameId.toString(), move.cardId);
+      return this.gameService.playCard(
+        gameId.toString(),
+        move.cardId,
+        move.targetId,
+      );
     } else if (move.type === 'end-turn') {
       return this.gameService.endTurn(gameId.toString());
-    } else if (move.type === 'attack') {
-      if (!move.targetId) {
-        throw new Error('Не указан игрок для атаки');
+    }
+    // else if (move.type === 'attack') {
+    //   if (!move.targetId) {
+    //     throw new Error('Не указан игрок для атаки');
+    //   }
+    //   if (!move.damage) {
+    //     throw new Error('Не указан урон');
+    //   }
+    //   return this.gameService.attackPlayer(
+    //     gameId.toString(),
+    //     move.targetId,
+    //     move.damage,
+    //   );
+    // }
+    else if (move.type === 'buy-card') {
+      if (!move.cardId) {
+        throw new Error('Не указан id карты для покупки');
       }
-      if (!move.damage) {
-        throw new Error('Не указан урон');
-      }
-      return this.gameService.attackPlayer(
-        gameId.toString(),
-        move.targetId,
-        move.damage,
-      );
-    } else if (move.type === 'buy-card') {
-      if (!move.marketplaceIndex) {
-        throw new Error('Не указан индекс карты для покупки');
-      }
-      if (!move.isLegendary) {
-        throw new Error('Не указан флаг легендарности карты');
+      if (move.isLegendary === null || move.isLegendary === undefined) {
+        throw new Error(
+          `Не указан флаг легендарности карты. move.isLegendary = ${move.isLegendary}`,
+        );
       }
       return this.gameService.buyCard(
         gameId.toString(),
-        move.marketplaceIndex,
+        move.cardId,
         move.isLegendary,
       );
     }
     throw new Error('Неверный тип хода');
+  }
+
+  @Post(':gameId/destroyCard')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async destroyCard(
+    @Param('gameId') gameId: string,
+    @Body() body: { playerId: string; cardId: number },
+  ) {
+    return this.gameService.destroyCardFromDiscard(
+      gameId,
+      body.playerId,
+      body.cardId,
+    );
+  }
+
+  @Post(':gameId/topDeckSelection')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async topDeckSelection(
+    @Param('gameId') gameId: string,
+    @Body() body: { playerId: string; action: string; cardId: number },
+  ) {
+    return this.gameService.handleTopDeckSelection(
+      gameId,
+      body.playerId,
+      body.action,
+      body.cardId,
+    );
+  }
+
+  @Post(':gameId/cancelAttackTargetSelection')
+  async cancelAttackTargetSelection(
+    @Param('gameId') gameId: string,
+    @Body() body: { playerId: string },
+  ) {
+    return this.gameService.cancelAttackTargetSelection(gameId, body.playerId);
+  }
+
+  @Post(':gameId/resolveAttackTarget')
+  async resolveAttackTarget(
+    @Param('gameId') gameId: string,
+    @Body() body: { playerId: string; opponentId: number },
+  ) {
+    return this.gameService.resolveAttackTarget(
+      gameId,
+      body.playerId,
+      body.opponentId,
+    );
+  }
+
+  @Post(':gameId/resolve-defense')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  async resolveDefense(
+    @Param('gameId') gameId: string,
+    @Body() body: { opponentId: string; defenseCardId?: number },
+  ) {
+    return this.gameService.resolveDefense(
+      gameId,
+      body.opponentId,
+      body.defenseCardId || null,
+    );
   }
 }

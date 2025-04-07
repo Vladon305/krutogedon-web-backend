@@ -1,289 +1,224 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Card, GameState, Player } from './types';
+import {
+  Card,
+  CardProperty,
+  CardType,
+  GameState,
+  Player,
+  SelectedPlayArea,
+  WizardBoard,
+  WizardPropertyToken,
+} from './types';
 import { GameGateway } from './game.gateway';
 import { Game } from './entities/game.entity';
 import { Move } from './entities/move.entity';
 import { User } from 'src/users/entities/user.entity';
 import { Invitation } from 'src/invitations/entities/invitation.entity';
-
+import { CardService } from './card.service';
+import { PlayerService } from './player.service';
+import { TurnService } from './turn.service';
+import { wizardPropertyTokens } from 'src/cardData/wizardPropertyTokens';
+import { playerAreas } from 'src/cardData/playerAreas';
+import { GameStateService } from './game-state.service';
 @Injectable()
 export class GameService {
-  private cards: Card[] = [
-    {
-      id: 1,
-      name: 'Злая Паучка',
-      cost: 0,
-      attack: 0,
-      life: 0,
-      effect: 'Залить',
-      properties: ['Бесспорная'],
-      damage: 0,
-      isAttack: false,
-    },
-    {
-      id: 2,
-      name: 'Место Крутого',
-      cost: 7,
-      attack: 0,
-      life: 0,
-      effect: 'Воскресить',
-      properties: [],
-      damage: 0,
-      isAttack: false,
-    },
-    {
-      id: 3,
-      name: 'Тёмный Аракон',
-      cost: 3,
-      attack: 1,
-      life: 1,
-      effect: 'Кутуз',
-      properties: [],
-      damage: 2,
-      isAttack: true,
-    },
-    {
-      id: 4,
-      name: 'Буйная Матя',
-      cost: 3,
-      attack: 0,
-      life: 0,
-      effect: 'Двойной отыгрыш',
-      properties: [],
-      damage: 0,
-      isAttack: false,
-    },
-    {
-      id: 5,
-      name: 'Война Костей',
-      cost: 3,
-      attack: 0,
-      life: 0,
-      effect: 'Война костей',
-      properties: [],
-      damage: 0,
-      isAttack: false,
-    },
-    {
-      id: 6,
-      name: 'Легенда Барахолки',
-      cost: 9,
-      attack: 0,
-      life: 0,
-      effect: 'Некромантика',
-      properties: [],
-      damage: 0,
-      isAttack: false,
-    },
-  ];
-
-  private marketplaceCards: Card[] = [
-    {
-      id: 7,
-      name: 'Обычная карта 1',
-      cost: 2,
-      attack: 1,
-      life: 1,
-      effect: '',
-      properties: [],
-      damage: 1,
-      isAttack: true,
-    },
-    {
-      id: 8,
-      name: 'Обычная карта 2',
-      cost: 3,
-      attack: 2,
-      life: 2,
-      effect: '',
-      properties: [],
-      damage: 2,
-      isAttack: true,
-    },
-    {
-      id: 9,
-      name: 'Обычная карта 3',
-      cost: 4,
-      attack: 3,
-      life: 3,
-      effect: '',
-      properties: [],
-      damage: 3,
-      isAttack: true,
-    },
-    {
-      id: 10,
-      name: 'Обычная карта 4',
-      cost: 5,
-      attack: 4,
-      life: 4,
-      effect: '',
-      properties: [],
-      damage: 4,
-      isAttack: true,
-    },
-    {
-      id: 11,
-      name: 'Обычная карта 5',
-      cost: 6,
-      attack: 5,
-      life: 5,
-      effect: '',
-      properties: [],
-      damage: 5,
-      isAttack: true,
-    },
-  ];
-
-  private legendaryMarketplaceCards: Card[] = [
-    {
-      id: 12,
-      name: 'Легендарная карта 1',
-      cost: 8,
-      attack: 6,
-      life: 6,
-      effect: 'Мощный эффект',
-      properties: [],
-      damage: 6,
-      isAttack: true,
-    },
-    {
-      id: 13,
-      name: 'Легендарная карта 2',
-      cost: 9,
-      attack: 7,
-      life: 7,
-      effect: 'Супер эффект',
-      properties: [],
-      damage: 7,
-      isAttack: true,
-    },
-    {
-      id: 14,
-      name: 'Легендарная карта 3',
-      cost: 10,
-      attack: 8,
-      life: 8,
-      effect: 'Ультра эффект',
-      properties: [],
-      damage: 8,
-      isAttack: true,
-    },
-  ];
-
   constructor(
-    @InjectRepository(Game)
-    private gameRepository: Repository<Game>,
-    @InjectRepository(Move)
-    private moveRepository: Repository<Move>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
+    @InjectRepository(Game) private gameRepository: Repository<Game>,
+    @InjectRepository(Move) private moveRepository: Repository<Move>,
+    @InjectRepository(User) private userRepository: Repository<User>,
     @InjectRepository(Invitation)
     private invitationRepository: Repository<Invitation>,
     private readonly gameGateway: GameGateway,
+    private readonly cardService: CardService,
+    private readonly playerService: PlayerService,
+    private readonly turnService: TurnService,
+    private readonly gameStateService: GameStateService,
   ) {}
 
-  private initializeDeck(): Card[] {
-    return this.cards.map((card) => ({ ...card }));
-  }
-
-  private shuffleDeck(deck: Card[]): Card[] {
-    for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-    return deck;
-  }
-
   async createGame(invitationId: number): Promise<Game> {
-    const invitation = await this.invitationRepository.findOne({
-      where: { id: invitationId },
-      relations: ['sender', 'receivers'],
-    });
+    const invitation = await this.validateInvitation(invitationId);
+    const players = this.validatePlayers(invitation);
 
-    if (!invitation || invitation.status !== 'accepted') {
-      throw new Error('Приглашение не найдено или не принято');
-    }
-
-    const player1 = invitation.sender;
-    const player2 = invitation.receivers[0];
-
-    if (!player1 || !player2) {
-      throw new Error('Один из игроков не найден');
-    }
-
-    const gameState: GameState = {
-      players: [
-        {
-          id: 1,
-          userId: player1.id.toString(),
-          username: player1.username,
-          deck: this.shuffleDeck(this.initializeDeck()),
-          hand: [],
-          discard: [],
-          life: 25,
-          power: 0,
-          krutagidonCups: 0,
-          deadWizardTokens: 0,
-          playArea: [],
-          selectionCompleted: false,
-          selectedFamiliar: null,
-          selectedProperty: null,
-          selectedPlayerArea: null,
-        },
-        {
-          id: 2,
-          userId: player2.id.toString(),
-          username: player2.username,
-          deck: this.shuffleDeck(this.initializeDeck()),
-          hand: [],
-          discard: [],
-          life: 25,
-          power: 0,
-          krutagidonCups: 0,
-          deadWizardTokens: 0,
-          playArea: [],
-          selectionCompleted: false,
-          selectedFamiliar: null,
-          selectedProperty: null,
-          selectedPlayerArea: null,
-        },
-      ],
-      currentPlayer: 1,
-      turn: 1,
-      status: 'pending',
-      marketplace: this.shuffleDeck([...this.marketplaceCards]).slice(0, 5),
-      legendaryMarketplace: this.shuffleDeck([
-        ...this.legendaryMarketplaceCards,
-      ]).slice(0, 3),
-      gameOver: false,
-    };
-
-    gameState.players.forEach((player) => {
-      player.hand = player.deck.splice(0, 5);
-    });
-
+    const gameState = await this.initializeGameState(players);
     const game = this.gameRepository.create({
-      players: [player1, player2],
+      players,
       gameState,
       currentTurn: 1,
       currentTurnIndex: 0,
+      status: 'pending',
     });
 
     await this.gameRepository.save(game);
 
-    const gameResponse: Game = {
-      id: game.id,
-      players: [player1, player2],
-      gameState,
-      currentTurn: 1,
-      currentTurnIndex: 0,
-    };
+    gameState.players.forEach((player) => {
+      this.gameGateway.emitSelectionRequired(game.id, player.userId, {});
+    });
 
+    const gameResponse = this.gameStateService.createGameResponse(game);
     this.gameGateway.emitGameUpdate(game.id.toString(), gameState);
     return gameResponse;
+  }
+
+  private async validateInvitation(invitationId: number): Promise<Invitation> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+      relations: ['sender', 'receivers'],
+    });
+    if (!invitation || invitation.status !== 'accepted') {
+      throw new Error('Приглашение не найдено или не принято');
+    }
+    return invitation;
+  }
+
+  private validatePlayers(invitation: Invitation): User[] {
+    const players = [...invitation.receivers];
+    if (players.length < 2 || players.length > 5) {
+      throw new Error('Количество игроков должно быть от 2 до 5');
+    }
+    players.forEach((player, i) => {
+      if (!player) {
+        throw new Error(`Игрок не найден: player index-${i}, player-${player}`);
+      }
+    });
+    return players;
+  }
+
+  private async initializeGameState(players: User[]): Promise<GameState> {
+    const deck = await this.cardService.initializeDeck();
+    const marketplace = await this.cardService.initializeMarketplace();
+    const legendaryMarketplace =
+      await this.cardService.initializeLegendaryMarketplace();
+    const strayMagicDeck = await this.cardService.getCardsByType(
+      CardType.StrayMagic,
+    );
+    const sluggishSticksDeck = await this.cardService.getCardsByType(
+      CardType.SluggishStick,
+    );
+
+    const legendCount = 9 - players.length;
+    const firstLegend = legendaryMarketplace.find(
+      (marketplace) => marketplace.name === 'Однорукий одноглазый одномуд вуд',
+    );
+    if (!firstLegend) {
+      throw new Error('Однорукий одноглазый одномуд вуд не найден');
+    }
+    const otherLegends = legendaryMarketplace.filter(
+      (marketplace) => marketplace.name !== 'Однорукий одноглазый одномуд вуд',
+    );
+    const selectedLegends = this.cardService
+      .shuffleDeck([...otherLegends])
+      .slice(0, legendCount);
+
+    const allWizardPropertyTokens: WizardPropertyToken[] = wizardPropertyTokens;
+    const allFamiliars = await this.cardService.getCardsByType(
+      CardType.Familiar,
+    );
+
+    const gameState: GameState = {
+      players: players.map((user, index) =>
+        this.createPlayer(
+          user,
+          index,
+          deck,
+          allWizardPropertyTokens,
+          allFamiliars,
+        ),
+      ),
+      currentPlayer: Math.floor(Math.random() * players.length) + 1,
+      turn: 1,
+      status: 'pending',
+      currentMarketplace: [],
+      currentLegendaryMarketplace: [],
+      marketplace: this.cardService.shuffleDeck([...marketplace]),
+      legendaryMarketplace: [firstLegend, ...selectedLegends],
+      strayMagicDiscard: [],
+      deadWizardTokens: players.length * 4,
+      isTopLegendaryCardHidden: true,
+      gameOver: false,
+      strayMagicDeck: this.cardService.shuffleDeck([...strayMagicDeck]),
+      sluggishSticksDeck: this.cardService.shuffleDeck([...sluggishSticksDeck]),
+      destroyedCards: [],
+      proposedProperties: {},
+      proposedFamiliars: {},
+      proposedPlayAreas: {},
+      krutagidonPrize: {
+        id: 1,
+        name: 'Главный приз Крутагидона',
+        description:
+          'В конце каждого хода ты берёшь на руку 6 карт из своей колоды и сбрасываешь одну из них',
+        imageUrl: '',
+        owner: null,
+      },
+    };
+
+    this.initializePlayerHands(gameState);
+    this.initializeMarketplace(gameState);
+    gameState.currentLegendaryMarketplace =
+      gameState.legendaryMarketplace.splice(0, 1);
+
+    return gameState;
+  }
+
+  private createPlayer(
+    user: User,
+    index: number,
+    deck: Card[],
+    allWizardPropertyTokens: WizardPropertyToken[],
+    allFamiliars: Card[],
+  ): Player {
+    const shuffledTokens = this.cardService.shuffleDeck([
+      ...allWizardPropertyTokens,
+    ]);
+    const selectedToken = shuffledTokens[0];
+    const shuffledFamiliars = this.cardService.shuffleDeck([...allFamiliars]);
+    const selectedFamiliar = shuffledFamiliars[0];
+
+    return {
+      id: index + 1,
+      userId: user.id.toString(),
+      username: user.username,
+      deck: this.cardService.shuffleDeck([...deck]),
+      hand: [],
+      playArea: [],
+      discard: [],
+      health: 20,
+      maxHealth: 25,
+      power: 0,
+      krutagidonCups: 0,
+      deadWizardCount: 0,
+      deadWizards: [],
+      selectionCompleted: false,
+      selectedFamiliar: null,
+      selectedProperty: null,
+      selectedPlayerArea: null,
+      familiar: selectedFamiliar,
+      wizardBoard: null,
+      wizardPropertyToken: selectedToken,
+    };
+  }
+
+  private initializePlayerHands(gameState: GameState): void {
+    gameState.players.forEach((player) => {
+      player.hand = player.deck.splice(0, 5);
+    });
+  }
+
+  private initializeMarketplace(gameState: GameState): void {
+    while (
+      gameState.currentMarketplace.length < 5 &&
+      gameState.marketplace.length > 0
+    ) {
+      const newCard = gameState.marketplace.shift();
+      if (newCard) {
+        if (newCard.type === CardType.ChaosCard) {
+          gameState.strayMagicDiscard.push(newCard);
+        } else {
+          gameState.currentMarketplace.push(newCard);
+        }
+      }
+    }
   }
 
   async getLobby(invitationId: number): Promise<any> {
@@ -296,13 +231,14 @@ export class GameService {
       throw new Error('Приглашение не найдено');
     }
 
+    const players = [invitation.sender, ...invitation.receivers];
     return {
       invitation: {
         id: invitation.id,
         status: invitation.status,
         inviterId: invitation.sender.id,
       },
-      players: [invitation.sender, ...invitation.receivers].map((user) => ({
+      players: players.map((user) => ({
         id: user.id,
         username: user.username,
       })),
@@ -312,28 +248,24 @@ export class GameService {
   async getGame(gameId: string): Promise<Game> {
     const game = await this.gameRepository.findOne({
       where: { id: +gameId },
-      relations: ['players'],
+      relations: ['players', 'winner'],
     });
 
     if (!game) {
       throw new Error('Игра не найдена');
     }
 
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState: game.gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
-
-    return gameResponse;
+    return this.gameStateService.createGameResponse(game);
   }
 
   async selectCards(
     gameId: string,
     playerId: string,
-    selectedCards: { property: Card; familiar: Card; playerArea: Card },
+    selectedCards: {
+      property: WizardPropertyToken;
+      familiar: Card;
+      playerArea: SelectedPlayArea;
+    },
   ): Promise<Game> {
     const game = await this.gameRepository.findOne({
       where: { id: +gameId },
@@ -346,287 +278,614 @@ export class GameService {
 
     const gameState: GameState = game.gameState;
     const player = gameState.players.find((p) => p.userId === playerId);
-
     if (!player) {
       throw new Error('Игрок не найден');
     }
 
-    player.deck.push(
-      selectedCards.property,
-      selectedCards.familiar,
-      selectedCards.playerArea,
-    );
-    player.playArea = [selectedCards.playerArea];
+    if (player.selectionCompleted) {
+      throw new Error('Игрок уже завершил выбор');
+    }
+
+    await this.validateSelectionOptions(gameId, playerId, selectedCards);
+
+    player.selectedProperty = selectedCards.property;
+    player.selectedFamiliar = selectedCards.familiar;
+    player.selectedPlayerArea = selectedCards.playerArea;
+    player.wizardPropertyToken = selectedCards.property;
+    player.familiar = selectedCards.familiar;
     player.selectionCompleted = true;
 
     if (gameState.players.every((p) => p.selectionCompleted)) {
       gameState.status = 'active';
+      game.status = 'active';
     }
 
-    game.gameState = gameState;
-    await this.gameRepository.save(game);
+    await this.gameStateService.saveGameState(game, gameState);
+    this.gameGateway.emitSelectionUpdated(gameId, playerId, {
+      familiar: selectedCards.familiar,
+      property: selectedCards.property,
+      playerArea: selectedCards.playerArea,
+    });
 
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
-
-    this.gameGateway.emitGameUpdate(gameId, gameState);
-    return gameResponse;
+    return this.gameStateService.createGameResponse(game);
   }
 
-  async playCard(gameId: string, cardId: number): Promise<Game> {
+  private async validateSelectionOptions(
+    gameId: string,
+    playerId: string,
+    selectedCards: {
+      property: WizardPropertyToken;
+      familiar: Card;
+      playerArea: SelectedPlayArea;
+    },
+  ): Promise<void> {
+    const options = await this.getSelectionOptions(gameId, playerId);
+    const isPropertyAvailable = options.properties.some(
+      (prop) => prop.id === selectedCards.property.id,
+    );
+    const isFamiliarAvailable = options.familiars.some(
+      (fam) => fam.id === selectedCards.familiar.id,
+    );
+    const isPlayAreaAvailable = options.playerAreas.some(
+      (area) => area.id === selectedCards.playerArea.id,
+    );
+
+    if (!isPropertyAvailable) {
+      throw new Error('Выбранное колдунское свойство недоступно');
+    }
+    if (!isFamiliarAvailable) {
+      throw new Error('Выбранный фамильяр недоступен');
+    }
+    if (!isPlayAreaAvailable) {
+      throw new Error('Выбранное игровое поле недоступно');
+    }
+  }
+
+  async getSelectionOptions(
+    gameId: string,
+    playerId: string,
+  ): Promise<{
+    properties: WizardPropertyToken[];
+    familiars: Card[];
+    playerAreas: SelectedPlayArea[];
+  }> {
     const game = await this.gameRepository.findOne({
       where: { id: +gameId },
       relations: ['players'],
     });
-
     if (!game) {
       throw new Error('Игра не найдена');
     }
 
     const gameState: GameState = game.gameState;
-    const playerId = gameState.currentPlayer;
-    const player = gameState.players.find((p) => p.id === playerId);
+    const player = gameState.players.find((p) => p.userId === playerId);
     if (!player) {
       throw new Error('Игрок не найден');
     }
-    const card = player.hand.find((c) => c.id === cardId);
 
+    const allWizardPropertyTokens: WizardPropertyToken[] = wizardPropertyTokens;
+    const allFamiliars = await this.cardService.getCardsByType(
+      CardType.Familiar,
+    );
+    const allPlayAreas: SelectedPlayArea[] = playerAreas;
+
+    if (
+      gameState.proposedProperties?.[playerId] &&
+      gameState.proposedFamiliars?.[playerId] &&
+      gameState.proposedPlayAreas?.[playerId]
+    ) {
+      return {
+        properties: allWizardPropertyTokens.filter((prop) =>
+          gameState.proposedProperties[playerId].includes(prop.id),
+        ),
+        familiars: allFamiliars.filter((fam) =>
+          gameState.proposedFamiliars[playerId].includes(fam.id),
+        ),
+        playerAreas: allPlayAreas.filter((area) =>
+          gameState.proposedPlayAreas[playerId].includes(area.id),
+        ),
+      };
+    }
+
+    const selectedProperties = gameState.players
+      .filter((p) => p.selectedProperty)
+      .map((p) => p.selectedProperty!.id);
+    const selectedFamiliars = gameState.players
+      .filter((p) => p.selectedFamiliar)
+      .map((p) => p.selectedFamiliar!.id);
+    const selectedPlayAreas = gameState.players
+      .filter((p) => p.selectedPlayerArea)
+      .map((p) => p.selectedPlayerArea!.id);
+
+    const proposedProperties = Object.values(
+      gameState.proposedProperties,
+    ).flat();
+    const proposedFamiliars = Object.values(gameState.proposedFamiliars).flat();
+
+    const availableWizardProperties = allWizardPropertyTokens.filter(
+      (prop) =>
+        !selectedProperties.includes(prop.id) &&
+        !proposedProperties.includes(prop.id),
+    );
+    const availableFamiliars = allFamiliars.filter(
+      (fam) =>
+        !selectedFamiliars.includes(fam.id) &&
+        !proposedFamiliars.includes(fam.id),
+    );
+    const availablePlayAreas = allPlayAreas.filter(
+      (area) => !selectedPlayAreas.includes(area.id),
+    );
+
+    if (availableWizardProperties.length < 2) {
+      throw new Error('Недостаточно доступных свойств для выбора');
+    }
+    if (availableFamiliars.length < 2) {
+      throw new Error('Недостаточно доступных фамильяров для выбора');
+    }
+    if (availablePlayAreas.length < 1) {
+      throw new Error('Недостаточно доступных игровых полей для выбора');
+    }
+
+    const randomWizardProperties = this.getRandomElements(
+      availableWizardProperties,
+      2,
+    );
+    const randomFamiliars = this.getRandomElements(availableFamiliars, 2);
+
+    gameState.proposedProperties[playerId] = randomWizardProperties.map(
+      (prop) => prop.id,
+    );
+    gameState.proposedFamiliars[playerId] = randomFamiliars.map(
+      (fam) => fam.id,
+    );
+    gameState.proposedPlayAreas[playerId] = availablePlayAreas.map(
+      (area) => area.id,
+    );
+
+    await this.gameStateService.saveGameState(game, gameState);
+
+    return {
+      properties: randomWizardProperties,
+      familiars: randomFamiliars,
+      playerAreas: availablePlayAreas,
+    };
+  }
+
+  async playCard(
+    gameId: string,
+    cardId: number,
+    opponentId: number | null = null,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find(
+      (p) => p.id === gameState.currentPlayer,
+    );
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    const card = player.hand.find((c) => c.id === cardId);
     if (!card) {
       throw new Error('Карта не найдена в руке');
     }
 
-    this.applyCardEffect(gameState, card, playerId);
-    player.hand = player.hand.filter((c) => c.id !== cardId);
-    player.discard.push(card);
-
-    this.checkGameEnd(gameState);
-
-    const user = await this.userRepository.findOne({
-      where: { id: +player.userId },
-    });
-    if (!user) {
-      throw new Error('Пользователь не найден');
+    if (!card.isAttack && opponentId) {
+      throw new Error('Для неатакующей карты opponentId должен быть null');
     }
-    const move = this.moveRepository.create({
-      game: game,
-      player: user,
-      moveData: { cardId, effect: card.effect },
-      timestamp: new Date(),
-    });
-    await this.moveRepository.save(move);
 
-    game.gameState = gameState;
-    await this.gameRepository.save(game);
+    if (card.isAttack && !opponentId) {
+      return await this.handleAttackTargetSelection(
+        game,
+        gameState,
+        player,
+        card,
+      );
+    }
 
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
+    if (card.isAttack && opponentId) {
+      const opponent = gameState.players.find((p) => p.id === opponentId);
+      if (!opponent) {
+        throw new Error('Противник не найден');
+      }
 
-    this.gameGateway.emitGameUpdate(gameId, gameState);
-    return gameResponse;
+      const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
+      if (hasDefenseCards) {
+        return await this.handleDefenseRequest(
+          game,
+          gameState,
+          player,
+          opponent,
+          card,
+        );
+      }
+    }
+
+    await this.applyCardEffect(game, gameState, player, card, opponentId);
+    return this.gameStateService.createGameResponse(game);
   }
 
-  async attackPlayer(
+  private async handleAttackTargetSelection(
+    game: Game,
+    gameState: GameState,
+    player: Player,
+    card: Card,
+  ): Promise<Game> {
+    if (gameState.pendingPlayCard) {
+      throw new Error('Уже ожидается выбор цели для другой карты');
+    }
+
+    gameState.pendingPlayCard = { playerId: player.id, cardId: card.id };
+    const attackTargets = gameState.players
+      .filter((p) => p.id !== player.id && p.health > 0)
+      .map((p) => p.id);
+
+    if (attackTargets.length === 0) {
+      throw new Error('Нет доступных целей для атаки');
+    }
+
+    this.gameGateway.emitAttackTargetRequired(
+      game.id.toString(),
+      player.userId,
+      {
+        cardId: card.id,
+        targets: attackTargets,
+      },
+    );
+    this.gameGateway.emitAttackTargetNotification(
+      game.id.toString(),
+      player.userId,
+      card.id,
+    );
+
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  private async handleDefenseRequest(
+    game: Game,
+    gameState: GameState,
+    player: Player,
+    opponent: Player,
+    card: Card,
+  ): Promise<Game> {
+    gameState.pendingAttack = {
+      attackerId: player.id,
+      opponentId: opponent.id,
+      cardId: card.id,
+      damage: card.damage || 0,
+    };
+
+    this.gameGateway.emitDefenseRequired(game.id.toString(), opponent.userId, {
+      attackerId: player.id,
+      cardId: card.id,
+      opponentId: opponent.id,
+      damage: card.damage || 0,
+    });
+
+    this.gameGateway.emitAttackNotification(
+      game.id.toString(),
+      player.userId,
+      opponent.userId,
+      card.id,
+      card.damage || 0,
+    );
+
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  private async applyCardEffect(
+    game: Game,
+    gameState: GameState,
+    player: Player,
+    card: Card,
+    opponentId: number | null,
+    defenseCardId: number | null = null,
+  ): Promise<void> {
+    let opponent: Player | null | undefined = null;
+
+    // Всегда применяем свойства карты, независимо от того, атакующая она или нет
+    await this.playerService.applyCardProperties(
+      game,
+      card,
+      player.id,
+      opponentId,
+    );
+
+    // Применяем эффект карты (например, "Залить", "Кутуз" и т.д.)
+    if (opponentId) {
+      opponent = gameState.players.find((p) => p.id === opponentId);
+      if (!opponent) {
+        throw new Error('Противник не найден');
+      }
+    }
+
+    // Обрабатываем защитную карту, если она была сыграна
+    if (card.isAttack && opponentId && opponent) {
+      if (defenseCardId) {
+        const defenseCard = opponent.hand.find((c) => c.id === defenseCardId);
+        if (!defenseCard || !defenseCard.isDefense) {
+          throw new Error(
+            'Выбранная защитная карта не найдена или недействительна',
+          );
+        }
+
+        this.playerService.applyDefenseCard(
+          game,
+          defenseCard,
+          opponent,
+          player,
+        );
+        opponent.hand = opponent.hand.filter((c) => c.id !== defenseCardId);
+        opponent.playArea.push(defenseCard);
+      }
+    }
+
+    // Перемещаем карту в игровую зону
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.playArea.push(card);
+
+    // Применяем эффекты жетона колдунского свойства
+    this.playerService.applyWizardPropertyTokenEffect(
+      gameState,
+      player,
+      'playCard',
+      card,
+    );
+
+    // Сохраняем ход
+    await this.gameStateService.createMove(game, player, {
+      type: 'play-card',
+      cardId: card.id,
+      opponentId,
+      effect: card.effect,
+    });
+
+    // Очищаем состояние атаки
+    gameState.pendingAttack = undefined;
+
+    // Проверяем, не закончилась ли игра
+    await this.checkGameEnd(gameState, game);
+    await this.gameStateService.saveGameState(game, gameState);
+  }
+
+  async resolveDefense(
     gameId: string,
-    targetId: string,
-    damage: number,
+    opponentId: string,
+    defenseCardId: number | null,
   ): Promise<Game> {
     const game = await this.gameRepository.findOne({
       where: { id: +gameId },
       relations: ['players'],
     });
-
     if (!game) {
       throw new Error('Игра не найдена');
     }
 
     const gameState: GameState = game.gameState;
-    const target = gameState.players.find((p) => p.id === +targetId);
-
-    if (!target) {
-      throw new Error('Цель не найдена');
+    if (
+      !gameState.pendingAttack ||
+      gameState.pendingAttack.opponentId.toString() !== opponentId
+    ) {
+      throw new Error('Нет ожидаемой атаки для этого игрока');
     }
 
-    target.life -= damage;
-    this.checkGameEnd(gameState);
-
-    const player = gameState.players.find(
-      (p) => p.id === gameState.currentPlayer,
-    );
+    const {
+      attackerId,
+      cardId,
+      opponentId: pendingAttackOpponentId,
+    } = gameState.pendingAttack;
+    const player = gameState.players.find((p) => p.id === attackerId);
     if (!player) {
-      throw new Error('Игрок не найден');
-    }
-    const user = await this.userRepository.findOne({
-      where: { id: +player.userId },
-    });
-    if (!user) {
-      throw new Error('Пользователь не найден');
-    }
-    const move = this.moveRepository.create({
-      game: game,
-      player: user,
-      moveData: { type: 'attack', targetId, damage },
-      timestamp: new Date(),
-    });
-    await this.moveRepository.save(move);
-
-    game.gameState = gameState;
-    await this.gameRepository.save(game);
-
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
-
-    this.gameGateway.emitGameUpdate(gameId, gameState);
-    return gameResponse;
-  }
-
-  async buyCard(
-    gameId: string,
-    marketplaceIndex: number,
-    isLegendary: boolean,
-  ): Promise<Game> {
-    const game = await this.gameRepository.findOne({
-      where: { id: +gameId },
-      relations: ['players'],
-    });
-
-    if (!game) {
-      throw new Error('Игра не найдена');
+      throw new Error('Атакующий игрок не найден');
     }
 
-    const gameState: GameState = game.gameState;
-    const player = gameState.players.find(
-      (p) => p.id === gameState.currentPlayer,
-    );
-    if (!player) {
-      throw new Error('Игрок не найден');
-    }
-    const market = isLegendary
-      ? gameState.legendaryMarketplace
-      : gameState.marketplace;
-    const card = market[marketplaceIndex];
-
+    const card = player.hand.find((c) => c.id === cardId);
     if (!card) {
-      throw new Error('Карта не найдена в магазине');
+      throw new Error('Карта не найдена в руке атакующего');
     }
 
-    if (player.power < card.cost) {
-      throw new Error('Недостаточно силы для покупки');
-    }
-
-    player.power -= card.cost;
-    player.deck.push(card);
-    market.splice(marketplaceIndex, 1);
-
-    if (isLegendary) {
-      gameState.legendaryMarketplace = market;
-    } else {
-      gameState.marketplace = market;
-    }
-
-    const user = await this.userRepository.findOne({
-      where: { id: +player.userId },
-    });
-    if (!user) {
-      throw new Error('Пользователь не найден');
-    }
-    const move = this.moveRepository.create({
-      game: game,
-      player: user,
-      moveData: { type: 'buy-card', marketplaceIndex, isLegendary },
-      timestamp: new Date(),
-    });
-    await this.moveRepository.save(move);
-
-    game.gameState = gameState;
-    await this.gameRepository.save(game);
-
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
-
-    this.gameGateway.emitGameUpdate(gameId, gameState);
-    return gameResponse;
-  }
-
-  private applyCardEffect(game: GameState, card: Card, playerId: number) {
-    const opponentId = playerId === 1 ? 2 : 1;
-    const opponent = game.players.find((p) => p.id === opponentId);
+    const opponent = gameState.players.find(
+      (p) => p.id === +pendingAttackOpponentId,
+    );
     if (!opponent) {
       throw new Error('Противник не найден');
     }
 
-    switch (card.effect) {
-      case 'Залить':
-        if (!card.properties.includes('Бесспорная')) {
-          if (opponent.deck.length > 0) {
-            const cardToAdd = opponent.deck.shift();
-            if (cardToAdd) {
-              opponent.hand.push(cardToAdd);
-            }
-          }
-        }
-        break;
-      case 'Кутуз':
-        const targetCard = opponent.discard.find((c) => c.effect);
-        if (targetCard) {
-          opponent.discard = opponent.discard.filter(
-            (c) => c.id !== targetCard.id,
-          );
-        }
-        break;
-      case 'Воскресить':
-        const cardToRevive = opponent.discard.shift();
-        if (cardToRevive) {
-          opponent.deck.push(cardToRevive);
-          this.shuffleDeck(opponent.deck);
-        }
-        break;
-      case 'Двойной отыгрыш':
-        for (let i = 0; i < 2; i++) {
-          if (opponent.deck.length > 0) {
-            const cardToAdd = opponent.deck.shift();
-            if (cardToAdd) {
-              opponent.hand.push(cardToAdd);
-            }
-          }
-        }
-        break;
-      case 'Война костей':
-        opponent.discard = opponent.discard.filter((c) => c.attack === 0);
-        break;
-      case 'Некромантика':
-        const cardsToRevive = opponent.discard.splice(0, 5);
-        opponent.deck.push(...cardsToRevive);
-        this.shuffleDeck(opponent.deck);
-        break;
-    }
+    await this.applyCardEffect(
+      game,
+      gameState,
+      player,
+      card,
+      opponent.id,
+      defenseCardId,
+    );
+    return this.gameStateService.createGameResponse(game);
   }
 
-  async endTurn(gameId: string): Promise<Game> {
+  async buyCard(
+    gameId: string,
+    cardId: number,
+    isLegendary: boolean,
+    isStrayMagic: boolean = false,
+    isFamiliar: boolean = false,
+  ): Promise<Game> {
     const game = await this.gameRepository.findOne({
       where: { id: +gameId },
       relations: ['players'],
     });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
 
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find(
+      (p) => p.id === gameState.currentPlayer,
+    );
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (gameState.currentPlayer !== player.id) {
+      throw new Error('Не ваш ход');
+    }
+
+    const { card, market } = this.findCardInMarket(
+      gameState,
+      cardId,
+      isLegendary,
+      isStrayMagic,
+      isFamiliar,
+      player,
+    );
+    const cost = isStrayMagic ? 3 : card.cost;
+    if (player.power < cost) {
+      throw new Error('Недостаточно мощи для покупки');
+    }
+
+    player.power -= cost;
+    gameState.lastBoughtOrGotCardCost = cost;
+
+    if (player.putNextCardOnTopOfDeck) {
+      player.deck.unshift(card);
+      player.putNextCardOnTopOfDeck = false;
+    } else {
+      player.discard.push(card);
+    }
+
+    this.updateMarket(
+      gameState,
+      market,
+      cardId,
+      isLegendary,
+      isStrayMagic,
+      isFamiliar,
+      player,
+    );
+
+    if (player.playAttackOnGetOrBuy) {
+      const attackCard = player.playArea.find((c) =>
+        c.properties.includes(
+          CardProperty.EachTimeYouGetOrBuyCardInTernPlayAttack,
+        ),
+      );
+      if (attackCard && attackCard.isAttack) {
+        const attackTargets = gameState.players
+          .filter((p) => p.id !== player.id && p.health > 0)
+          .map((p) => p.id);
+        this.gameGateway.emitAttackRequired(+gameId, player.userId, {
+          cardId: attackCard.id,
+          damage: card.cost,
+          targets: attackTargets,
+        });
+      }
+    }
+
+    this.playerService.applyWizardPropertyTokenEffect(
+      gameState,
+      player,
+      'buyCard',
+      card,
+    );
+
+    await this.gameStateService.createMove(game, player, {
+      type: 'buy-card',
+      cardId,
+      isLegendary,
+      isStrayMagic,
+      isFamiliar,
+    });
+
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  private findCardInMarket(
+    gameState: GameState,
+    cardId: number,
+    isLegendary: boolean,
+    isStrayMagic: boolean,
+    isFamiliar: boolean,
+    player: Player,
+  ): { card: Card; market: Card[] } {
+    let card: Card | undefined;
+    let market: Card[] = [];
+
+    if (isLegendary) {
+      market = gameState.currentLegendaryMarketplace;
+      card = market.find((c) => c.id === cardId);
+    } else if (isStrayMagic) {
+      market = gameState.strayMagicDeck;
+      card = market[0];
+    } else if (isFamiliar) {
+      if (!player.familiar) {
+        throw new Error('Фамильяр не найден');
+      }
+      card = player.familiar;
+      if (card?.id !== cardId) {
+        throw new Error('Вы можете купить только своего фамильяра');
+      }
+    } else {
+      market = gameState.currentMarketplace;
+      card = market.find((c) => c.id === cardId);
+    }
+
+    if (!card) {
+      throw new Error('Карта не найдена');
+    }
+
+    return { card, market };
+  }
+
+  private updateMarket(
+    gameState: GameState,
+    market: Card[],
+    cardId: number,
+    isLegendary: boolean,
+    isStrayMagic: boolean,
+    isFamiliar: boolean,
+    player: Player,
+  ): void {
+    if (isLegendary) {
+      gameState.currentLegendaryMarketplace = market.filter(
+        (c) => c.id !== cardId,
+      );
+      if (gameState.legendaryMarketplace.length > 0) {
+        gameState.currentLegendaryMarketplace = [
+          ...gameState.currentLegendaryMarketplace,
+          ...gameState.legendaryMarketplace.splice(0, 1),
+        ];
+      }
+    } else if (isStrayMagic) {
+      gameState.strayMagicDeck = gameState.strayMagicDeck.filter(
+        (c) => c.id !== cardId,
+      );
+    } else if (isFamiliar) {
+      player.familiar = null;
+    } else {
+      gameState.currentMarketplace = market.filter((c) => c.id !== cardId);
+      if (gameState.marketplace.length > 0) {
+        gameState.currentMarketplace = [
+          ...gameState.currentMarketplace,
+          ...gameState.marketplace.splice(0, 1),
+        ];
+      }
+    }
+  }
+
+  async startTurn(gameId: string): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
     if (!game) {
       throw new Error('Игра не найдена');
     }
@@ -639,42 +898,463 @@ export class GameService {
       throw new Error('Текущий игрок не найден');
     }
 
-    if (currentPlayer.deck.length > 0) {
-      const cardToAdd = currentPlayer.deck.shift();
-      if (cardToAdd) {
-        currentPlayer.hand.push(cardToAdd);
+    while (
+      gameState.currentMarketplace.length < 5 &&
+      gameState.marketplace.length > 0
+    ) {
+      const newCard = gameState.marketplace.shift();
+      if (newCard) {
+        if (newCard.type === CardType.StrayMagic) {
+          this.turnService.applyStrayMagicEffect(game, newCard, currentPlayer);
+          gameState.strayMagicDiscard.push(newCard);
+        } else {
+          gameState.currentMarketplace.push(newCard);
+        }
       }
     }
 
-    gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
-    gameState.turn += 1;
-    game.currentTurn = gameState.currentPlayer;
-    game.currentTurnIndex = gameState.currentPlayer - 1;
-
-    this.checkGameEnd(gameState);
-
-    game.gameState = gameState;
-    await this.gameRepository.save(game);
-
-    const gameResponse: Game = {
-      id: game.id,
-      players: game.players,
-      gameState,
-      currentTurn: game.currentTurn,
-      currentTurnIndex: game.currentTurnIndex,
-    };
-
-    this.gameGateway.emitGameUpdate(gameId, gameState);
-    return gameResponse;
+    this.turnService.applyStartOfTurnEffects(gameState, currentPlayer);
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
   }
 
-  private checkGameEnd(game: GameState) {
-    game.players.forEach((player) => {
-      if (player.life <= 0) {
-        game.status = 'finished';
-        game.winner = game.players.find((p) => p.id !== player.id);
-        game.gameOver = true;
-      }
+  async endTurn(gameId: string): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
     });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const currentPlayer = gameState.players.find(
+      (p) => p.id === gameState.currentPlayer,
+    );
+    if (!currentPlayer) {
+      throw new Error('Текущий игрок не найден');
+    }
+
+    currentPlayer.discard = [
+      ...currentPlayer.discard,
+      ...currentPlayer.hand,
+      ...currentPlayer.playArea.filter((card) => !card.isPermanent),
+    ];
+    currentPlayer.hand = [];
+    currentPlayer.playArea = currentPlayer.playArea.filter(
+      (card) => card.isPermanent,
+    );
+    currentPlayer.power = 0;
+
+    this.turnService.applyEndOfTurnEffects(game, currentPlayer);
+    await this.playerService.drawCard(game, currentPlayer, 5);
+
+    if (gameState.krutagidonPrize?.owner === currentPlayer) {
+      await this.playerService.drawCard(game, currentPlayer, 6);
+      if (currentPlayer.hand.length > 0) {
+        const cardToDiscard = currentPlayer.hand.shift();
+        if (cardToDiscard) {
+          currentPlayer.discard.push(cardToDiscard);
+        }
+      }
+    }
+
+    if (
+      gameState.isTopLegendaryCardHidden &&
+      gameState.currentLegendaryMarketplace.length > 0
+    ) {
+      const legend = gameState.currentLegendaryMarketplace[0];
+      if (!legend) {
+        throw new Error('Легенды нет');
+      }
+      gameState.isTopLegendaryCardHidden = false;
+      this.gameGateway.emitLegendaryCardRevealed(gameId, legend);
+      this.turnService.applyLegendaryGroupAttack(game, legend);
+    }
+
+    const totalPlayers = gameState.players.length;
+    const currentPlayerIndex = gameState.players.findIndex(
+      (p) => p.id === gameState.currentPlayer,
+    );
+    const nextPlayerIndex = (currentPlayerIndex + 1) % totalPlayers;
+    const nextPlayer = gameState.players[nextPlayerIndex];
+
+    gameState.currentPlayer = nextPlayer.id;
+    gameState.turn += 1;
+    game.currentTurn = gameState.currentPlayer;
+    game.currentTurnIndex = nextPlayerIndex;
+
+    await this.checkGameEnd(gameState, game);
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  private async checkGameEnd(gameState: GameState, game: Game): Promise<void> {
+    const alivePlayers = gameState.players.filter(
+      (player) => player.health > 0,
+    );
+
+    const isLegendaryMarketplaceEmpty =
+      gameState.legendaryMarketplace.length === 0 &&
+      gameState.currentLegendaryMarketplace.length === 0;
+    const cannotFillMarketplace =
+      gameState.currentMarketplace.length < 5 &&
+      gameState.marketplace.length === 0;
+    const noDeadWizardTokens = gameState.deadWizardTokens <= 0;
+
+    if (
+      isLegendaryMarketplaceEmpty ||
+      cannotFillMarketplace ||
+      noDeadWizardTokens
+    ) {
+      gameState.status = 'finished';
+      gameState.gameOver = true;
+      game.status = 'finished';
+
+      const playerScores = gameState.players.map((player) => {
+        const playerDeck = [
+          ...player.deck,
+          ...player.hand,
+          ...player.discard,
+          ...player.playArea,
+        ];
+        let score = playerDeck.reduce(
+          (sum, card) => sum + (card.victoryPoints || 0),
+          0,
+        );
+        score -= player.deadWizards.length * 3;
+        const sluggishSticksCount = playerDeck.filter(
+          (card) => card.type === CardType.SluggishStick,
+        ).length;
+        score -= sluggishSticksCount;
+        const legendCount = playerDeck.filter(
+          (card) => card.type === CardType.Legend,
+        ).length;
+        return { player, score, legendCount };
+      });
+
+      playerScores.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.legendCount !== a.legendCount)
+          return b.legendCount - a.legendCount;
+        return a.player.deadWizards.length - b.player.deadWizards.length;
+      });
+
+      const winner = playerScores[0].player;
+      const winnerUser = await this.userRepository.findOne({
+        where: { id: +winner.userId },
+      });
+      if (winnerUser) {
+        game.winner = winnerUser;
+        gameState.winner = winner;
+      } else {
+        gameState.winner = null;
+      }
+    }
+
+    await this.gameRepository.save(game);
+  }
+
+  getRandomElements<T>(array: T[], count: number): T[] {
+    if (count > array.length) return array;
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, count);
+  }
+
+  async destroyCardFromDiscard(
+    gameId: string,
+    playerId: string,
+    cardId: number,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.userId === playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (gameState.currentPlayer !== player.id) {
+      throw new Error('Не ваш ход');
+    }
+
+    const cardIndex = player.discard.findIndex((card) => card.id === cardId);
+    if (cardIndex === -1) {
+      throw new Error('Карта не найдена в сбросе');
+    }
+
+    const card = player.discard.splice(cardIndex, 1)[0];
+    gameState.destroyedCards.push(card);
+
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async handleTopDeckSelection(
+    gameId: string,
+    playerId: string,
+    action: string,
+    cardId: number,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.userId === playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (gameState.currentPlayer !== player.id) {
+      throw new Error('Не ваш ход');
+    }
+
+    if (player.deck.length === 0 || player.deck[0].id !== cardId) {
+      throw new Error('Верхняя карта колоды не совпадает');
+    }
+
+    const topCard = player.deck.shift();
+    if (!topCard) {
+      throw new Error('Не найдено верхней карты');
+    }
+
+    if (action === 'take' || action === 'draw') {
+      player.hand.push(topCard);
+    } else if (action === 'remove') {
+      gameState.destroyedCards.push(topCard);
+    } else if (action === 'return') {
+      player.deck.push(topCard);
+      this.playerService.shuffleDeck(player.deck);
+    }
+
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async resolveAttackTarget(
+    gameId: string,
+    playerId: string,
+    opponentId: number,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    if (
+      !gameState.pendingPlayCard ||
+      gameState.pendingPlayCard.playerId !== +playerId
+    ) {
+      throw new Error('Нет ожидаемой карты для выбора цели');
+    }
+
+    const { cardId } = gameState.pendingPlayCard;
+    const player = gameState.players.find((p) => p.id === +playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    const card = player.hand.find((c) => c.id === cardId);
+    if (!card) {
+      throw new Error('Карта не найдена в руке');
+    }
+
+    gameState.pendingPlayCard = undefined;
+
+    const opponent = gameState.players.find((p) => p.id === opponentId);
+    if (!opponent || opponent.health <= 0) {
+      throw new Error('Недопустимая цель атаки');
+    }
+
+    const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
+    if (hasDefenseCards) {
+      return await this.handleDefenseRequest(
+        game,
+        gameState,
+        player,
+        opponent,
+        card,
+      );
+    }
+
+    await this.applyCardEffect(game, gameState, player, card, opponentId);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async cancelAttackTargetSelection(
+    gameId: string,
+    playerId: string,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.id === +playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (
+      !gameState.pendingPlayCard ||
+      gameState.pendingPlayCard.playerId !== +playerId
+    ) {
+      throw new Error('Нет ожидаемого выбора цели для этого игрока');
+    }
+
+    gameState.pendingPlayCard = undefined;
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async resolveTopDeckSelection(
+    gameId: string,
+    playerId: string,
+    selections: { enemyId: number; cardId: number; discard: boolean }[],
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.userId === playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (
+      !gameState.pendingTopDeckSelection ||
+      gameState.pendingTopDeckSelection.playerId !== player.id
+    ) {
+      throw new Error('Нет ожидаемого выбора карт для сброса');
+    }
+
+    for (const { enemyId, cardId, discard } of selections) {
+      const enemy = gameState.players.find((p) => p.id === enemyId);
+      if (enemy && enemy.deck.length > 0 && enemy.deck[0].id === cardId) {
+        const card = enemy.deck.shift();
+        if (card) {
+          if (discard) {
+            gameState.destroyedCards.push(card);
+          } else {
+            enemy.deck.push(card);
+            this.playerService.shuffleDeck(enemy.deck);
+          }
+        }
+      }
+    }
+
+    gameState.pendingTopDeckSelection = undefined;
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async resolveDestroyCardSelection(
+    gameId: string,
+    playerId: string,
+    cardId: number,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.userId === playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (
+      !gameState.pendingDestroyCardSelection ||
+      gameState.pendingDestroyCardSelection.playerId !== player.id
+    ) {
+      throw new Error('Нет ожидаемого выбора карты для уничтожения');
+    }
+
+    if (gameState.pendingDestroyCardSelection.source === 'hand') {
+      const card = player.hand.find((c) => c.id === cardId);
+      if (card) {
+        player.hand = player.hand.filter((c) => c.id !== cardId);
+        gameState.destroyedCards.push(card);
+      }
+    }
+
+    gameState.pendingDestroyCardSelection = undefined;
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
+  }
+
+  async resolveEnemySelection(
+    gameId: string,
+    playerId: string,
+    enemyId: number,
+  ): Promise<Game> {
+    const game = await this.gameRepository.findOne({
+      where: { id: +gameId },
+      relations: ['players'],
+    });
+    if (!game) {
+      throw new Error('Игра не найдена');
+    }
+
+    const gameState: GameState = game.gameState;
+    const player = gameState.players.find((p) => p.userId === playerId);
+    if (!player) {
+      throw new Error('Игрок не найден');
+    }
+
+    if (
+      !gameState.pendingEnemySelection ||
+      gameState.pendingEnemySelection.playerId !== player.id
+    ) {
+      throw new Error('Нет ожидаемого выбора врага');
+    }
+
+    const enemy = gameState.players.find((p) => p.id === enemyId);
+    if (!enemy || !gameState.pendingEnemySelection.targets.includes(enemyId)) {
+      throw new Error('Недопустимый выбор врага');
+    }
+
+    if (gameState.pendingEnemySelection.action === 'giveDeadWizard') {
+      if (player.deadWizardCount > 0) {
+        player.deadWizardCount -= 1;
+        enemy.deadWizardCount += 1;
+      }
+    }
+
+    gameState.pendingEnemySelection = undefined;
+    await this.gameStateService.saveGameState(game, gameState);
+    return this.gameStateService.createGameResponse(game);
   }
 }
