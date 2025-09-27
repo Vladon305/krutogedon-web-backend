@@ -15,11 +15,15 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private jwtService: JwtService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Регистрация нового пользователя' })
@@ -67,7 +71,6 @@ export class AuthController {
     };
   }
 
-  @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @Post('refresh')
   @ApiOperation({ summary: 'Обновление accessToken с помощью refreshToken' })
@@ -78,7 +81,19 @@ export class AuthController {
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not found');
     }
-    return this.authService.refreshToken(req.user.id, refreshToken);
+
+    try {
+      // Декодируем refresh token для получения userId
+      const decoded = this.jwtService.verify(refreshToken);
+      const newAccessToken = await this.authService.refreshToken(
+        decoded.sub,
+        refreshToken,
+      );
+
+      return newAccessToken;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   @UseGuards(AuthGuard('jwt'))
