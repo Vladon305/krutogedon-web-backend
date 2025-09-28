@@ -96,7 +96,7 @@ export interface GameState {
   marketplace: Card[]; // Оставшиеся карты рынка
   currentLegendaryMarketplace: Card[]; // Текущие легендарные карты на рынке
   legendaryMarketplace: Card[]; // Оставшиеся легендарные карты рынка
-  strayMagicDiscard: Card[]; // Стопка уничтоженных карт беспредела
+  chaosCardDiscard: Card[]; // Стопка уничтоженных карт беспредела
   deadWizardTokens: number; // Количество жетонов дохлых колдунов
   isTopLegendaryCardHidden: boolean; // Закрыта ли верхняя карта легенд
   gameOver: boolean; // Завершена ли игра
@@ -107,6 +107,8 @@ export interface GameState {
   proposedProperties: { [playerId: string]: number[] }; // Хранит ID предложенных свойств для каждого игрока
   proposedFamiliars: { [playerId: string]: number[] }; // Хранит ID предложенных фамильяров для каждого игрока
   proposedPlayAreas: { [playerId: string]: number[] }; // Хранит ID предложенных игровых полей для каждого игрока
+  selectionQueue?: number[]; // Очередь выбора игроков (массив userId)
+  currentSelectionPlayerIndex?: number; // Индекс текущего игрока в очереди выбора
   // Новое поле для текущей атаки
   pendingAttack?: {
     attackerId: number;

@@ -52,9 +52,14 @@ export class GameService {
 
     await this.gameRepository.save(game);
 
-    gameState.players.forEach((player) => {
-      this.gameGateway.emitSelectionRequired(game.id, player.userId, {});
-    });
+    // ✅ ИСПРАВЛЕНО: отправляем событие только первому игроку в очереди
+    if (gameState.selectionQueue && gameState.selectionQueue.length > 0) {
+      const firstPlayerId = gameState.selectionQueue[0];
+      const firstPlayer = gameState.players.find((p) => p.id === firstPlayerId);
+      if (firstPlayer) {
+        this.gameGateway.emitSelectionRequired(game.id, firstPlayer.userId, {});
+      }
+    }
 
     const gameResponse = this.gameStateService.createGameResponse(game);
     this.gameGateway.emitGameUpdate(game.id.toString(), gameState);
@@ -133,16 +138,18 @@ export class GameService {
       currentLegendaryMarketplace: [],
       marketplace: this.cardService.shuffleDeck([...marketplace]),
       legendaryMarketplace: [firstLegend, ...selectedLegends],
-      strayMagicDiscard: [],
+      chaosCardDiscard: [],
       deadWizardTokens: players.length * 4,
       isTopLegendaryCardHidden: true,
       gameOver: false,
-      strayMagicDeck: this.cardService.shuffleDeck([...strayMagicDeck]),
-      sluggishSticksDeck: this.cardService.shuffleDeck([...sluggishSticksDeck]),
+      strayMagicDeck: [...strayMagicDeck],
+      sluggishSticksDeck: [...sluggishSticksDeck],
       destroyedCards: [],
       proposedProperties: {},
       proposedFamiliars: {},
       proposedPlayAreas: {},
+      selectionQueue: players.map((u) => u.id), // ✅ ДОБАВЛЕНО: очередь выбора игроков
+      currentSelectionPlayerIndex: 0, // ✅ ДОБАВЛЕНО: индекс текущего игрока в очереди
       krutagidonPrize: {
         id: 1,
         name: 'Главный приз Крутагидона',
@@ -176,7 +183,7 @@ export class GameService {
     const selectedFamiliar = shuffledFamiliars[0];
 
     return {
-      id: index + 1,
+      id: user.id,
       userId: user.id.toString(),
       username: user.username,
       deck: this.cardService.shuffleDeck([...deck]),
@@ -213,7 +220,7 @@ export class GameService {
       const newCard = gameState.marketplace.shift();
       if (newCard) {
         if (newCard.type === CardType.ChaosCard) {
-          gameState.strayMagicDiscard.push(newCard);
+          gameState.chaosCardDiscard.push(newCard);
         } else {
           gameState.currentMarketplace.push(newCard);
         }
@@ -277,7 +284,13 @@ export class GameService {
     }
 
     const gameState: GameState = game.gameState;
-    const player = gameState.players.find((p) => p.userId === playerId);
+    // console.log('gameState.players', gameState.players);
+    // console.log('playerId', playerId);
+    const player = gameState.players.find(
+      (p) => p.userId === playerId.toString(),
+    );
+    console.log('player', player);
+    console.log('player', !player);
     if (!player) {
       throw new Error('Игрок не найден');
     }
@@ -294,6 +307,29 @@ export class GameService {
     player.wizardPropertyToken = selectedCards.property;
     player.familiar = selectedCards.familiar;
     player.selectionCompleted = true;
+
+    // ✅ ДОБАВЛЕНО: переход к следующему игроку в очереди
+    if (
+      gameState.selectionQueue &&
+      gameState.currentSelectionPlayerIndex !== undefined
+    ) {
+      const currentIndex = gameState.currentSelectionPlayerIndex;
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < gameState.selectionQueue.length) {
+        gameState.currentSelectionPlayerIndex = nextIndex;
+        const nextPlayerId = gameState.selectionQueue[nextIndex];
+        const nextPlayer = gameState.players.find((p) => p.id === nextPlayerId);
+
+        if (nextPlayer && !nextPlayer.selectionCompleted) {
+          this.gameGateway.emitSelectionRequired(
+            Number(gameId),
+            nextPlayer.userId,
+            {},
+          );
+        }
+      }
+    }
 
     if (gameState.players.every((p) => p.selectionCompleted)) {
       gameState.status = 'active';
@@ -369,6 +405,7 @@ export class GameService {
     );
     const allPlayAreas: SelectedPlayArea[] = playerAreas;
 
+    // Если опции уже были сгенерированы для этого игрока, возвращаем их
     if (
       gameState.proposedProperties?.[playerId] &&
       gameState.proposedFamiliars?.[playerId] &&
@@ -401,6 +438,7 @@ export class GameService {
       gameState.proposedProperties,
     ).flat();
     const proposedFamiliars = Object.values(gameState.proposedFamiliars).flat();
+    const proposedPlayAreas = Object.values(gameState.proposedPlayAreas).flat();
 
     const availableWizardProperties = allWizardPropertyTokens.filter(
       (prop) =>
@@ -412,8 +450,11 @@ export class GameService {
         !selectedFamiliars.includes(fam.id) &&
         !proposedFamiliars.includes(fam.id),
     );
+    // ✅ ИСПРАВЛЕНО: playerArea теперь фильтруются по выбранным и предложенным
     const availablePlayAreas = allPlayAreas.filter(
-      (area) => !selectedPlayAreas.includes(area.id),
+      (area) =>
+        !selectedPlayAreas.includes(area.id) &&
+        !proposedPlayAreas.includes(area.id),
     );
 
     if (availableWizardProperties.length < 2) {
@@ -422,7 +463,7 @@ export class GameService {
     if (availableFamiliars.length < 2) {
       throw new Error('Недостаточно доступных фамильяров для выбора');
     }
-    if (availablePlayAreas.length < 1) {
+    if (availablePlayAreas.length < 2) {
       throw new Error('Недостаточно доступных игровых полей для выбора');
     }
 
@@ -431,6 +472,9 @@ export class GameService {
       2,
     );
     const randomFamiliars = this.getRandomElements(availableFamiliars, 2);
+    
+    // ✅ ВОЗВРАЩЕНО: playerArea выбираются независимо от фамильяров
+    const randomPlayerAreas = this.getRandomElements(availablePlayAreas, 2);
 
     gameState.proposedProperties[playerId] = randomWizardProperties.map(
       (prop) => prop.id,
@@ -438,7 +482,7 @@ export class GameService {
     gameState.proposedFamiliars[playerId] = randomFamiliars.map(
       (fam) => fam.id,
     );
-    gameState.proposedPlayAreas[playerId] = availablePlayAreas.map(
+    gameState.proposedPlayAreas[playerId] = randomPlayerAreas.map(
       (area) => area.id,
     );
 
@@ -447,7 +491,7 @@ export class GameService {
     return {
       properties: randomWizardProperties,
       familiars: randomFamiliars,
-      playerAreas: availablePlayAreas,
+      playerAreas: randomPlayerAreas,
     };
   }
 
@@ -906,7 +950,7 @@ export class GameService {
       if (newCard) {
         if (newCard.type === CardType.StrayMagic) {
           this.turnService.applyStrayMagicEffect(game, newCard, currentPlayer);
-          gameState.strayMagicDiscard.push(newCard);
+          gameState.chaosCardDiscard.push(newCard);
         } else {
           gameState.currentMarketplace.push(newCard);
         }

@@ -87,7 +87,7 @@ export class GameController {
   ): Promise<Game> {
     return this.gameService.selectCards(
       gameId,
-      selectCardsDto.playerId,
+      selectCardsDto.playerId.toString(),
       selectCardsDto.selectedCards,
     );
   }
