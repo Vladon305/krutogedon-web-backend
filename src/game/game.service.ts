@@ -192,7 +192,7 @@ export class GameService {
       discard: [],
       health: 20,
       maxHealth: 25,
-      power: 0,
+      power: 10, // 🧪 TESTING MODE: изменено с 0 на 10 для тестирования карт
       krutagidonCups: 0,
       deadWizardCount: 0,
       deadWizards: [],
@@ -213,19 +213,49 @@ export class GameService {
   }
 
   private initializeMarketplace(gameState: GameState): void {
-    while (
-      gameState.currentMarketplace.length < 5 &&
-      gameState.marketplace.length > 0
-    ) {
-      const newCard = gameState.marketplace.shift();
-      if (newCard) {
-        if (newCard.type === CardType.ChaosCard) {
-          gameState.chaosCardDiscard.push(newCard);
-        } else {
-          gameState.currentMarketplace.push(newCard);
-        }
+    // ========================================
+    // 🧪 TESTING MODE - Uncomment to enable
+    // ========================================
+    // Выберите 5 карт для тестирования по их именам:
+    const testCards = [
+      'Солнцеликий', // Тест: +2 мощи, взять 1 карту, атака 10 урона
+      'Распальцун', // Тест: +5 мощи, -1 за мертвого волшебника
+      'Эпичные схватки', // Тест: +3 мощи, атака = 2×защитные карты врага в сбросе
+      'Двойняшки', // Тест: взять 2 карты
+      'Рыцарь-сопленосец', // Тест: +2 мощи (базовая проверка)
+    ];
+    //
+    // // Найти карты по именам
+    for (const cardName of testCards) {
+      const cardIndex = gameState.marketplace.findIndex(
+        (card) => card.name === cardName,
+      );
+      if (cardIndex !== -1) {
+        const card = gameState.marketplace.splice(cardIndex, 1)[0];
+        gameState.currentMarketplace.push(card);
+      } else {
+        console.warn(`Карта "${cardName}" не найдена в колоде`);
       }
     }
+    return; // Закомментируй эту строку для production режима
+    // ========================================
+    // END TESTING MODE
+    // ========================================
+
+    // Production режим - случайное заполнение барахолки
+    // while (
+    //   gameState.currentMarketplace.length < 5 &&
+    //   gameState.marketplace.length > 0
+    // ) {
+    //   const newCard = gameState.marketplace.shift();
+    //   if (newCard) {
+    //     if (newCard.type === CardType.ChaosCard) {
+    //       gameState.chaosCardDiscard.push(newCard);
+    //     } else {
+    //       gameState.currentMarketplace.push(newCard);
+    //     }
+    //   }
+    // }
   }
 
   async getLobby(invitationId: number): Promise<any> {
@@ -472,7 +502,7 @@ export class GameService {
       2,
     );
     const randomFamiliars = this.getRandomElements(availableFamiliars, 2);
-    
+
     // ✅ ВОЗВРАЩЕНО: playerArea выбираются независимо от фамильяров
     const randomPlayerAreas = this.getRandomElements(availablePlayAreas, 2);
 
@@ -516,6 +546,14 @@ export class GameService {
       throw new Error('Игрок не найден');
     }
 
+    // ✅ ИСПРАВЛЕНО: Блокируем атакующего игрока, пока противник решает защищаться
+    if (
+      gameState.pendingAttack &&
+      gameState.pendingAttack.attackerId === player.id
+    ) {
+      throw new Error('Дождитесь ответа противника на вашу атаку');
+    }
+
     const card = player.hand.find((c) => c.id === cardId);
     if (!card) {
       throw new Error('Карта не найдена в руке');
@@ -540,16 +578,17 @@ export class GameService {
         throw new Error('Противник не найден');
       }
 
-      const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
-      if (hasDefenseCards) {
-        return await this.handleDefenseRequest(
-          game,
-          gameState,
-          player,
-          opponent,
-          card,
-        );
-      }
+      // ✅ ИСПРАВЛЕНО: Всегда показываем диалог защиты, независимо от наличия защитных карт
+      // const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
+      // if (hasDefenseCards) {
+      return await this.handleDefenseRequest(
+        game,
+        gameState,
+        player,
+        opponent,
+        card,
+      );
+      // }
     }
 
     await this.applyCardEffect(game, gameState, player, card, opponentId);
@@ -600,6 +639,11 @@ export class GameService {
     opponent: Player,
     card: Card,
   ): Promise<Game> {
+    // Перемещаем атакующую карту из руки в игровую зону
+    // (карта считается сыгранной при начале атаки)
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.playArea.push(card);
+
     gameState.pendingAttack = {
       attackerId: player.id,
       opponentId: opponent.id,
@@ -673,9 +717,12 @@ export class GameService {
       }
     }
 
-    // Перемещаем карту в игровую зону
-    player.hand = player.hand.filter((c) => c.id !== card.id);
-    player.playArea.push(card);
+    // Перемещаем карту в игровую зону (если её там ещё нет)
+    // Карта может уже быть в playArea, если была перемещена в handleDefenseRequest
+    if (!player.playArea.find((c) => c.id === card.id)) {
+      player.hand = player.hand.filter((c) => c.id !== card.id);
+      player.playArea.push(card);
+    }
 
     // Применяем эффекты жетона колдунского свойства
     this.playerService.applyWizardPropertyTokenEffect(
@@ -732,9 +779,10 @@ export class GameService {
       throw new Error('Атакующий игрок не найден');
     }
 
-    const card = player.hand.find((c) => c.id === cardId);
+    // Ищем атакующую карту в игровой зоне (она была перемещена туда в handleDefenseRequest)
+    const card = player.playArea.find((c) => c.id === cardId);
     if (!card) {
-      throw new Error('Карта не найдена в руке атакующего');
+      throw new Error('Атакующая карта не найдена в игровой зоне');
     }
 
     const opponent = gameState.players.find(
@@ -780,6 +828,14 @@ export class GameService {
 
     if (gameState.currentPlayer !== player.id) {
       throw new Error('Не ваш ход');
+    }
+
+    // ✅ ИСПРАВЛЕНО: Блокируем атакующего игрока, пока противник решает защищаться
+    if (
+      gameState.pendingAttack &&
+      gameState.pendingAttack.attackerId === player.id
+    ) {
+      throw new Error('Дождитесь ответа противника на вашу атаку');
     }
 
     const { card, market } = this.findCardInMarket(
@@ -1229,19 +1285,20 @@ export class GameService {
       throw new Error('Недопустимая цель атаки');
     }
 
-    const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
-    if (hasDefenseCards) {
-      return await this.handleDefenseRequest(
-        game,
-        gameState,
-        player,
-        opponent,
-        card,
-      );
-    }
+    // ✅ ИСПРАВЛЕНО: Всегда показываем диалог защиты, независимо от наличия защитных карт
+    // const hasDefenseCards = opponent.hand.some((c) => c.isDefense);
+    // if (hasDefenseCards) {
+    return await this.handleDefenseRequest(
+      game,
+      gameState,
+      player,
+      opponent,
+      card,
+    );
+    // }
 
-    await this.applyCardEffect(game, gameState, player, card, opponentId);
-    return this.gameStateService.createGameResponse(game);
+    // await this.applyCardEffect(game, gameState, player, card, opponentId);
+    // return this.gameStateService.createGameResponse(game);
   }
 
   async cancelAttackTargetSelection(
