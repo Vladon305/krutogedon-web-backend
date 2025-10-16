@@ -84,6 +84,7 @@ export interface Player {
 
   putNextCardOnTopOfDeck?: boolean; // Для PutNextBuyingCardOnTopOfDeck
   playAttackOnGetOrBuy?: boolean; // Для EachTimeYouGetOrBuyCardInTernPlayAttack
+  firstWizardPlayedThisTurn?: boolean; // Для IfHaveFirstWizardDrawOneCard (постоянные карты)
 }
 
 export interface GameState {
@@ -116,6 +117,7 @@ export interface GameState {
     cardId: number;
     damage: number;
   };
+  permanentCards: Card[];
   pendingPlayCard?: {
     playerId: number;
     cardId: number;
@@ -195,6 +197,9 @@ export enum CardProperty {
   DrawAnySpellCardFromDiscardOfAddTwoPower = 'drawAnySpellCardFromDiscardOfAddTwoPower',
   DrawAnyTreasureCardFromDiscardOfAddTwoPower = 'drawAnyTreasureCardFromDiscardOfAddTwoPower',
   EachTimeYouGetOrBuyCardInTernPlayAttack = 'eachTimeYouGetOrBuyCardInTernPlayAttack',
+
+  //place properties
+  IfHaveFirstWizardDrawOneCard = 'ifHaveFirstWizardDrawOneCard',
 }
 
 export enum CardAttackProperty {

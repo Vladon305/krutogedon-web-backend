@@ -145,6 +145,7 @@ export class GameService {
       strayMagicDeck: [...strayMagicDeck],
       sluggishSticksDeck: [...sluggishSticksDeck],
       destroyedCards: [],
+      permanentCards: [],
       proposedProperties: {},
       proposedFamiliars: {},
       proposedPlayAreas: {},

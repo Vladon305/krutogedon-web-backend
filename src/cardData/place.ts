@@ -1,5 +1,5 @@
 import { Card } from 'src/game/entities/card.entity';
-import { CardType } from 'src/game/types';
+import { CardProperty, CardType } from 'src/game/types';
 
 export const place: Partial<Card>[] = [
   {
@@ -53,7 +53,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Гора черепламени',
     effect: '',
-    properties: [],
+    properties: [CardProperty.IfHaveFirstWizardDrawOneCard],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8176_processed.png',

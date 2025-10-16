@@ -193,6 +193,23 @@ export class PlayerService {
         this.applyDefenseProperty(property, player);
       }
     }
+
+    // Триггер для постоянных карт с IfHaveFirstWizardDrawOneCard
+    // Срабатывает при разыгрывании первого волшебника за ход
+    if (
+      card.type === CardType.Wizard &&
+      !player.firstWizardPlayedThisTurn
+    ) {
+      const permanentCards = player.playArea.filter((c) => c.isPermanent);
+      const hasIfHaveFirstWizard = permanentCards.some((c) =>
+        c.properties.includes(CardProperty.IfHaveFirstWizardDrawOneCard),
+      );
+
+      if (hasIfHaveFirstWizard) {
+        await this.drawCard(game, player, 1);
+        player.firstWizardPlayedThisTurn = true;
+      }
+    }
   }
 
   private async applyProperty(
@@ -222,7 +239,17 @@ export class PlayerService {
       case CardProperty.DrawTwoCard:
       case CardProperty.DrawThreeCards:
       case CardProperty.DrawFourCards:
-        const cardsToDraw = parseInt(property.match(/\d+/)?.[0] || '1');
+        // Фикс: явное указание количества карт вместо regex (drawTwoCard содержит слово "Two", а не цифру)
+        const cardsToDraw =
+          property === CardProperty.DrawOneCard
+            ? 1
+            : property === CardProperty.DrawTwoCard
+              ? 2
+              : property === CardProperty.DrawThreeCards
+                ? 3
+                : property === CardProperty.DrawFourCards
+                  ? 4
+                  : 1;
         await this.drawCard(game, player, cardsToDraw);
         break;
 
@@ -345,6 +372,12 @@ export class PlayerService {
 
       case CardProperty.EachTimeYouGetOrBuyCardInTernPlayAttack:
         player.playAttackOnGetOrBuy = true;
+        break;
+
+      //place properties
+      case CardProperty.IfHaveFirstWizardDrawOneCard:
+        // Пассивное свойство: срабатывает автоматически при разыгрывании первого волшебника за ход
+        // Реализация триггера находится в методе applyCardProperties после обработки всех свойств
         break;
 
       default:
