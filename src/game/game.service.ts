@@ -204,6 +204,10 @@ export class GameService {
       familiar: selectedFamiliar,
       wizardBoard: null,
       wizardPropertyToken: selectedToken,
+      firstWizardPlayedThisTurn: false,
+      firstCreaturePlayedThisTurn: false,
+      firstTreasurePlayedThisTurn: false,
+      firstSpellPlayedThisTurn: false,
     };
   }
 
@@ -219,6 +223,12 @@ export class GameService {
     // ========================================
     // Выберите 5 карт для тестирования по их именам:
     const testCards = [
+      'Замок спрутобойни',
+      'Грибучее болото',
+      'Хоромы страсти',
+      'Гора черепламени',
+      'Шестёрочка', // Тест: удвоение эффектов лечения
+      'Арена крутагидона', // Тест: удвоение урона от атак
       'Солнцеликий', // Тест: +2 мощи, взять 1 карту, атака 10 урона
       'Распальцун', // Тест: +5 мощи, -1 за мертвого волшебника
       'Эпичные схватки', // Тест: +3 мощи, атака = 2×защитные карты врага в сбросе
@@ -1084,6 +1094,26 @@ export class GameService {
     gameState.turn += 1;
     game.currentTurn = gameState.currentPlayer;
     game.currentTurnIndex = nextPlayerIndex;
+
+    // Применяем эффекты начала хода для следующего игрока
+    // Заполняем барахолку до 5 карт
+    while (
+      gameState.currentMarketplace.length < 5 &&
+      gameState.marketplace.length > 0
+    ) {
+      const newCard = gameState.marketplace.shift();
+      if (newCard) {
+        if (newCard.type === CardType.StrayMagic) {
+          this.turnService.applyStrayMagicEffect(game, newCard, nextPlayer);
+          gameState.chaosCardDiscard.push(newCard);
+        } else {
+          gameState.currentMarketplace.push(newCard);
+        }
+      }
+    }
+
+    // Сбрасываем флаги и применяем эффекты начала хода
+    this.turnService.applyStartOfTurnEffects(gameState, nextPlayer);
 
     await this.checkGameEnd(gameState, game);
     await this.gameStateService.saveGameState(game, gameState);

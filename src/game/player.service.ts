@@ -25,6 +25,15 @@ export class PlayerService {
     damage: number,
     attacker: Player,
   ): void {
+    // Проверка на удвоение урона от Арены крутагидона
+    const hasArena = attacker.playArea.some((card) =>
+      card.properties.includes(CardProperty.DoubleAttackDamage),
+    );
+
+    if (hasArena) {
+      damage *= 2;
+    }
+
     target.health -= damage;
     if (target.health < 1) {
       this.handlePlayerDeath(gameState, target, attacker);
@@ -194,12 +203,15 @@ export class PlayerService {
       }
     }
 
-    // Триггер для постоянных карт с IfHaveFirstWizardDrawOneCard
-    // Срабатывает при разыгрывании первого волшебника за ход
-    if (
-      card.type === CardType.Wizard &&
-      !player.firstWizardPlayedThisTurn
-    ) {
+    // Триггеры для постоянных карт (мест) - срабатывают при разыгрывании первой карты определённого типа за ход
+
+    // Гора черепламени: при разыгрывании первого волшебника
+    // Защита от undefined (для старых сохранений)
+    if (player.firstWizardPlayedThisTurn === undefined) {
+      player.firstWizardPlayedThisTurn = false;
+    }
+
+    if (card.type === CardType.Wizard && !player.firstWizardPlayedThisTurn) {
       const permanentCards = player.playArea.filter((c) => c.isPermanent);
       const hasIfHaveFirstWizard = permanentCards.some((c) =>
         c.properties.includes(CardProperty.IfHaveFirstWizardDrawOneCard),
@@ -207,8 +219,75 @@ export class PlayerService {
 
       if (hasIfHaveFirstWizard) {
         await this.drawCard(game, player, 1);
-        player.firstWizardPlayedThisTurn = true;
       }
+
+      // Устанавливаем флаг независимо от наличия постоянной карты
+      player.firstWizardPlayedThisTurn = true;
+    }
+    // Замок спрутобойни: при разыгрывании первой твари
+    // Защита от undefined (для старых сохранений)
+    if (player.firstCreaturePlayedThisTurn === undefined) {
+      player.firstCreaturePlayedThisTurn = false;
+    }
+
+    if (
+      card.type === CardType.Creature &&
+      !player.firstCreaturePlayedThisTurn
+    ) {
+      const permanentCards = player.playArea.filter((c) => c.isPermanent);
+      const hasIfHaveFirstCreature = permanentCards.some((c) =>
+        c.properties.includes(CardProperty.IfHaveFirstCreatureDrawOneCard),
+      );
+
+      if (hasIfHaveFirstCreature) {
+        await this.drawCard(game, player, 1);
+      }
+
+      // Устанавливаем флаг независимо от наличия постоянной карты
+      player.firstCreaturePlayedThisTurn = true;
+    }
+
+    // Грибучее болото: при разыгрывании первого сокровища
+    // Защита от undefined (для старых сохранений)
+    if (player.firstTreasurePlayedThisTurn === undefined) {
+      player.firstTreasurePlayedThisTurn = false;
+    }
+
+    if (
+      card.type === CardType.Treasure &&
+      !player.firstTreasurePlayedThisTurn
+    ) {
+      const permanentCards = player.playArea.filter((c) => c.isPermanent);
+      const hasIfHaveFirstTreasure = permanentCards.some((c) =>
+        c.properties.includes(CardProperty.IfHaveFirstTreasureDrawOneCard),
+      );
+
+      if (hasIfHaveFirstTreasure) {
+        await this.drawCard(game, player, 1);
+      }
+
+      // Устанавливаем флаг независимо от наличия постоянной карты
+      player.firstTreasurePlayedThisTurn = true;
+    }
+
+    // Хоромы страсти: при разыгрывании первого заклинания
+    // Защита от undefined (для старых сохранений)
+    if (player.firstSpellPlayedThisTurn === undefined) {
+      player.firstSpellPlayedThisTurn = false;
+    }
+
+    if (card.type === CardType.Spell && !player.firstSpellPlayedThisTurn) {
+      const permanentCards = player.playArea.filter((c) => c.isPermanent);
+      const hasIfHaveFirstSpell = permanentCards.some((c) =>
+        c.properties.includes(CardProperty.IfHaveFirstSpellDrawOneCard),
+      );
+
+      if (hasIfHaveFirstSpell) {
+        await this.drawCard(game, player, 1);
+      }
+
+      // Устанавливаем флаг независимо от наличия постоянной карты
+      player.firstSpellPlayedThisTurn = true;
     }
   }
 
@@ -378,6 +457,32 @@ export class PlayerService {
       case CardProperty.IfHaveFirstWizardDrawOneCard:
         // Пассивное свойство: срабатывает автоматически при разыгрывании первого волшебника за ход
         // Реализация триггера находится в методе applyCardProperties после обработки всех свойств
+        break;
+
+      case CardProperty.IfHaveFirstCreatureDrawOneCard:
+        // Пассивное свойство: срабатывает автоматически при разыгрывании первой твари за ход
+        // Реализация триггера находится в методе applyCardProperties
+        break;
+
+      case CardProperty.IfHaveFirstTreasureDrawOneCard:
+        // Пассивное свойство: срабатывает автоматически при разыгрывании первого сокровища за ход
+        // Реализация триггера находится в методе applyCardProperties
+        break;
+
+      case CardProperty.IfHaveFirstSpellDrawOneCard:
+        // Пассивное свойство: срабатывает автоматически при разыгрывании первого заклинания за ход
+        // Реализация триггера находится в методе applyCardProperties
+        break;
+
+      case CardProperty.DoubleHealingEffects:
+        // TODO: Пассивное свойство для Шестёрочки - удваивает эффекты накручивания (лечения)
+        // Пока не реализовано, так как механика накручивания ещё не добавлена в игру
+        break;
+
+      case CardProperty.DoubleAttackDamage:
+        // Пассивное свойство для Арены крутагидона - удваивает урон атак
+        // Реализация находится в методе dealDamage()
+        // Дополнительная логика сброса карты при убийстве врага находится в handlePlayerDeath()
         break;
 
       default:
@@ -708,6 +813,21 @@ export class PlayerService {
 
     if (gameState.krutagidonPrize && deadPlayer !== killer) {
       gameState.krutagidonPrize.owner = killer;
+    }
+
+    // Арена крутагидона: при убийстве врага сбрасывается в сброс
+    if (killer) {
+      const arenaIndex = killer.playArea.findIndex(
+        (card) =>
+          card.name === 'Арена крутагидона' &&
+          card.properties.includes(CardProperty.DoubleAttackDamage),
+      );
+
+      if (arenaIndex !== -1) {
+        const arenaCard = killer.playArea[arenaIndex];
+        killer.playArea.splice(arenaIndex, 1);
+        killer.discard.push(arenaCard);
+      }
     }
   }
 

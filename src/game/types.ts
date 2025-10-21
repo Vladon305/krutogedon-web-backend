@@ -85,6 +85,9 @@ export interface Player {
   putNextCardOnTopOfDeck?: boolean; // Для PutNextBuyingCardOnTopOfDeck
   playAttackOnGetOrBuy?: boolean; // Для EachTimeYouGetOrBuyCardInTernPlayAttack
   firstWizardPlayedThisTurn?: boolean; // Для IfHaveFirstWizardDrawOneCard (постоянные карты)
+  firstCreaturePlayedThisTurn?: boolean; // Для IfHaveFirstCreatureDrawOneCard (Замок спрутобойни)
+  firstTreasurePlayedThisTurn?: boolean; // Для IfHaveFirstTreasureDrawOneCard (Грибучее болото)
+  firstSpellPlayedThisTurn?: boolean; // Для IfHaveFirstSpellDrawOneCard (Хоромы страсти)
 }
 
 export interface GameState {
@@ -200,6 +203,11 @@ export enum CardProperty {
 
   //place properties
   IfHaveFirstWizardDrawOneCard = 'ifHaveFirstWizardDrawOneCard',
+  IfHaveFirstCreatureDrawOneCard = 'ifHaveFirstCreatureDrawOneCard',
+  IfHaveFirstTreasureDrawOneCard = 'ifHaveFirstTreasureDrawOneCard',
+  IfHaveFirstSpellDrawOneCard = 'ifHaveFirstSpellDrawOneCard',
+  DoubleHealingEffects = 'doubleHealingEffects',
+  DoubleAttackDamage = 'doubleAttackDamage',
 }
 
 export enum CardAttackProperty {

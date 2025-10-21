@@ -7,8 +7,11 @@ export class TurnService {
   constructor(private readonly playerService: PlayerService) {}
 
   applyStartOfTurnEffects(gameState: GameState, player: Player) {
-    // Сброс флага для постоянных карт с IfHaveFirstWizardDrawOneCard
+    // Сброс флагов для постоянных карт (мест)
     player.firstWizardPlayedThisTurn = false;
+    player.firstCreaturePlayedThisTurn = false;
+    player.firstTreasurePlayedThisTurn = false;
+    player.firstSpellPlayedThisTurn = false;
 
     player.playArea.forEach((card) => {
       if (card.effect?.startsWith('в начале хода')) {

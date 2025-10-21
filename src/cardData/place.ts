@@ -5,7 +5,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Замок спрутобойни',
     effect: '',
-    properties: [],
+    properties: [CardProperty.IfHaveFirstCreatureDrawOneCard],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8173_processed.png',
@@ -21,7 +21,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Грибучее болото',
     effect: '',
-    properties: [],
+    properties: [CardProperty.IfHaveFirstTreasureDrawOneCard],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8174_processed.png',
@@ -37,7 +37,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Хоромы страсти',
     effect: '',
-    properties: [],
+    properties: [CardProperty.IfHaveFirstSpellDrawOneCard],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8175_processed.png',
@@ -69,7 +69,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Шестёрочка',
     effect: '',
-    properties: [],
+    properties: [CardProperty.DoubleHealingEffects],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8177_processed.png',
@@ -85,7 +85,7 @@ export const place: Partial<Card>[] = [
   {
     name: 'Арена крутагидона',
     effect: '',
-    properties: [],
+    properties: [CardProperty.DoubleAttackDamage],
     attackProperties: [],
     defenseProperties: [],
     imageUrl: '/mainDeck/single/place/IMG_8178_processed.png',
